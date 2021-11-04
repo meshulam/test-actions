@@ -1,0 +1,46 @@
+name: Deploy to staging environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_environment:
+        description: 'Environment (stable, unstable, sandbox)'
+        default: 'unstable'
+        required: true
+
+jobs:
+  deploy-staging:
+    name: Deploy Staging
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.deploy_environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      -
+        name: Setup Node with Private GitHub Registry Access
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14.16.1'
+          registry-url: 'https://npm.pkg.github.com'
+
+      -
+        name: Build
+        env:
+          COMMIT_HASH: ${{ github.sha }}
+          WEBPACK_ENV: ${{ github.event.inputs.deploy_environment }}
+        run: |
+          make build-reverb-ui
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          role-duration-seconds: 1200
+          role-to-assume: frontend-deployer
+
+      - name: Copy reverb-ui to reverb-assets-stg bucket
+        run: |
+          aws s3 sync reverb-ui/dist s3://reverb-assets-stg/${{ github.event.inputs.deploy_environment }}-assets
