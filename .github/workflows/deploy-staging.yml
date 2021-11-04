@@ -1,4 +1,4 @@
-name: Deploy to staging environment
+name: Staging build+deploy
 
 on:
   workflow_dispatch:
@@ -9,10 +9,19 @@ on:
         required: true
 
 jobs:
+  validate-args:
+    name: Validate arguments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Valid deploy environment
+        run: |
+         if ! [[ "${{ github.event.inputs.deploy_environment }}" =~ ^(stable|unstable|sandbox)$ ]]; then echo "$env is not a valid deploy environment" && exit 1 ; fi
+
   deploy-staging:
     name: Deploy Staging
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.deploy_environment }}
+    needs: validate-args
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -31,16 +40,3 @@ jobs:
           WEBPACK_ENV: ${{ github.event.inputs.deploy_environment }}
         run: |
           make build-reverb-ui
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-          role-duration-seconds: 1200
-          role-to-assume: frontend-deployer
-
-      - name: Copy reverb-ui to reverb-assets-stg bucket
-        run: |
-          aws s3 sync reverb-ui/dist s3://reverb-assets-stg/${{ github.event.inputs.deploy_environment }}-assets
